@@ -1,0 +1,266 @@
+library (dplyr)
+library(caret)
+library(grDevices)
+library(leaps)
+library(relaimpo)
+library(corrplot)
+library(car)
+library(DAAG)
+library(leaps)
+library(car)
+library(ggplot2)
+library(GGally)
+fires <- read.csv("/Users/Kushal/Downloads/forestfires.csv",header = TRUE, stringsAsFactors = FALSE)
+head(fires)
+fires<-as.data.frame(fires)
+
+# exclude rows where area = 0
+fires <- fires[fires$area != 0,]
+
+#removing geographical and spatial variables
+fires<-fires[,-c(1,2,4)]
+#removing rain
+fires<-fires[,-c(9)]
+
+
+#scatterplot matrix
+ggpairs(subset(fires))
+firesMat = as.matrix(as.data.frame(lapply(fires, as.numeric)))
+par(mfrow=c(1,1))
+
+#Creating the Seasons column and removing month
+for (i in seq_along(fires)) {
+  fires[[i]][fires[[i]] %in% "jan"] <- 1
+}
+for (i in seq_along(fires)) {
+  fires[[i]][fires[[i]] %in% "feb"] <- 2
+}
+for (i in seq_along(fires)) {
+  fires[[i]][fires[[i]] %in% "mar"] <- 3
+}
+for (i in seq_along(fires)) {
+  fires[[i]][fires[[i]] %in% "apr"] <- 4
+}
+for (i in seq_along(fires)) {
+  fires[[i]][fires[[i]] %in% "may"] <- 5
+}
+for (i in seq_along(fires)) {
+  fires[[i]][fires[[i]] %in% "jun"] <- 6
+}
+for (i in seq_along(fires)) {
+  fires[[i]][fires[[i]] %in% "jul"] <- 7
+}
+for (i in seq_along(fires)) {
+  fires[[i]][fires[[i]] %in% "aug"] <- 8
+}
+for (i in seq_along(fires)) {
+  fires[[i]][fires[[i]] %in% "sep"] <- 9
+}
+for (i in seq_along(fires)) {
+  fires[[i]][fires[[i]] %in% "oct"] <- 10
+}
+for (i in seq_along(fires)) {
+  fires[[i]][fires[[i]] %in% "nov"] <- 11
+}
+for (i in seq_along(fires)) {
+  fires[[i]][fires[[i]] %in% "dec"] <- 12
+}
+
+fires<- fires %>%
+  mutate(Season = case_when(month == 1 ~ 'Winter/Spring',
+                            month == 2 ~ 'Winter/Spring',month == 3 ~ 'Winter/Spring',month == 4 ~ 'Winter/Spring',
+                            
+                            month == 5 ~ 'Winter/Spring',month == 6 ~ 'Summer/Fall',month == 7 ~ 'Summer/Fall',
+                            
+                            month == 8 ~ 'Summer/Fall',month == 9 ~ 'Summer/Fall', month == 10 ~ 'Summer/Fall',
+                            
+                            month == 11 ~ 'Summer/Fall',month== 12 ~ 'Winter/Spring'))
+#remove month
+fires<-fires[,-c(1)]
+fires$logarea <- log(fires$area)
+fires<-fires[,-c(8)]
+#Finding influential points:
+mod <-lm(fires$logarea ~ ., data = fires)
+cooksd<- cooks.distance(mod)
+plot(cooksd,pch="*",cex=2,main="Influential Obs by Cooks Distance")
+abline (h=0.5,col="red")
+text(x=1:length(cooksd)+1, y=0.5, labels=ifelse(cooksd>4*mean(cooksd, na.rm=T),names(cooksd),""), col="red")
+influential = which(cooksd>0.5)
+#Since no point is influential, we won't remove any.
+
+#Finding the best model using AIC:
+
+mod.AIC <- lm(logarea~., data = fires)
+summary(mod.AIC)
+aicfit <- mod.AIC
+step <- stepAIC(aicfit, direction="both")
+
+leaps<-regsubsets(logarea~., data=fires, nbest = 1, method = "exhaustive")
+
+reg_summary=summary(leaps)
+par(mfrow = c(2,2))
+plot(reg_summary$rss, xlab = "Number of Variables", ylab = "RSS", type = "l")
+plot(reg_summary$adjr2, xlab = "Number of Variables", ylab = "Adjusted RSq", type = "l")
+
+# We will now plot a red dot to indicate the model with the largest adjusted R^2 statistic.
+# The which.max() function can be used to identify the location of the maximum point of a vector
+adj_r2_max = which.max(reg_summary$adjr2) # 11
+rssmax=which.max(reg_summary$rss)
+
+# The points() command works like the plot() command, except that it puts points 
+# on a plot that has already been created instead of creating a new plot
+points(adj_r2_max, reg_summary$adjr2[adj_r2_max], col ="red", cex = 2, pch = 20)
+points(rssmax, reg_summary$rssmax[rssmax], col ="red", cex = 2, pch = 20)
+
+# We'll do the same for C_p and BIC, this time looking for the models with the SMALLEST statistic
+plot(reg_summary$cp, xlab = "Number of Variables", ylab = "Cp", type = "l")
+cp_min = which.min(reg_summary$cp) # 10
+points(cp_min, reg_summary$cp[cp_min], col = "red", cex = 2, pch = 20)
+
+plot(reg_summary$bic, xlab = "Number of Variables", ylab = "BIC", type = "l")
+bic_min = which.min(reg_summary$bic) # 6
+points(bic_min, reg_summary$bic[bic_min], col = "red", cex = 2, pch = 20)
+
+leapsSquared<-regsubsets(logarea~.^2, data=fires, nbest = 1, method = "exhaustive", really.big = T)
+
+
+reg_summary=summary(leapsSquared)
+par(mfrow = c(2,2))
+plot(reg_summary$rss, xlab = "Number of Variables", ylab = "RSS", type = "l")
+plot(reg_summary$adjr2, xlab = "Number of Variables", ylab = "Adjusted RSq", type = "l")
+
+# We will now plot a red dot to indicate the model with the largest adjusted R^2 statistic.
+# The which.max() function can be used to identify the location of the maximum point of a vector
+adj_r2_max = which.max(reg_summary$adjr2) # 11
+rssmax=which.max(reg_summary$rss)
+
+# The points() command works like the plot() command, except that it puts points 
+# on a plot that has already been created instead of creating a new plot
+points(adj_r2_max, reg_summary$adjr2[adj_r2_max], col ="red", cex = 2, pch = 20)
+points(rssmax, reg_summary$rssmax[rssmax], col ="red", cex = 2, pch = 20)
+
+# We'll do the same for C_p and BIC, this time looking for the models with the SMALLEST statistic
+plot(reg_summary$cp, xlab = "Number of Variables", ylab = "Cp", type = "l")
+cp_min = which.min(reg_summary$cp) # 10
+points(cp_min, reg_summary$cp[cp_min], col = "red", cex = 2, pch = 20)
+
+plot(reg_summary$bic, xlab = "Number of Variables", ylab = "BIC", type = "l")
+bic_min = which.min(reg_summary$bic) # 6
+points(bic_min, reg_summary$bic[bic_min], col = "red", cex = 2, pch = 20)
+
+#BIC
+leaps<-regsubsets(logarea~., data=fires, nbest = 1, method = "exhaustive")
+leapsSquared<-regsubsets(logarea~.^2, data=fires, nbest = 1, method = "exhaustive", really.big = T)
+subsets(leaps,statistic="bic", legend = FALSE)
+sum<-summary(leaps)
+sum$bic
+sum$which[3,]
+
+#adjr2
+
+subsets(leaps, statistic="adjr2",legend = FALSE)
+sum<-summary(leaps)
+sum$adjr2
+sum$which[3,]
+
+#Cp
+
+subsets(leaps, statistic="cp",legend = FALSE)
+sum<-summary(leaps)
+sum$cp
+sum$which[3,]
+
+#BIC
+
+subsets(leapsSquared, statistic="bic",legend = FALSE)
+sum<-summary(leapsSquared)
+sum$bic
+sum$which[7,]
+
+#adjr2
+
+subsets(leapsSquared, statistic="adjr2",legend = FALSE)
+sum<-summary(leapsSquared)
+sum$adjr2
+sum$which[7,]
+
+#Cp
+
+subsets(leapsSquared, statistic="cp",legend = FALSE)
+sum<-summary(leapsSquared)
+sum$cp
+sum$which[7,]
+lm7<-lm(fires$logarea~ fires$DMC + fires$DC  + fires$FFMC*fires$DMC +
+          fires$FFMC*fires$DC + fires$DC*fires$ISI + fires$temp*fires$RH + fires$temp*factor(fires$Season))
+
+outlierTest(lm7) # Bonferonni p-value for most extreme obs
+qqPlot(lm7, main="QQ Plot") #qq plot for studentized resid
+leveragePlots(lm7) # leverage plots
+
+# distribution of studentized residuals
+library(MASS)
+sresid <- studres(lm7)
+hist(sresid, freq=FALSE,
+     main="Distribution of Studentized Residuals")
+xfit<-seq(min(sresid),max(sresid),length=40)
+yfit<-dnorm(xfit)
+lines(xfit, yfit)
+
+# Evaluate homoscedasticity
+# non-constant error variance test
+ncvTest(lm7)
+# plot studentized residuals vs. fitted values
+spreadLevelPlot(lm7)
+
+# Evaluate Nonlinearity
+# component + residual plot
+#crPlots(lm7)
+# Ceres plots
+#ceresPlots(lm7)
+
+durbinWatsonTest(lm7)
+
+library(gvlma)
+gvmodel <- gvlma(lm7)
+summary(gvmodel)
+
+
+Creation and diagnostics for 3 predictor model:
+```{r}
+lm3<-lm(fires$logarea~ fires$DMC + fires$ISI  + factor(fires$Season))
+
+outlierTest(lm3) # Bonferonni p-value for most extreme obs
+qqPlot(lm3, main="QQ Plot") #qq plot for studentized resid
+leveragePlots(lm3) # leverage plots
+
+# distribution of studentized residuals
+library(MASS)
+sresid <- studres(lm3)
+hist(sresid, freq=FALSE,
+     main="Distribution of Studentized Residuals")
+xfit<-seq(min(sresid),max(sresid),length=40)
+yfit<-dnorm(xfit)
+lines(xfit, yfit)
+
+# Evaluate homoscedasticity
+# non-constant error variance test
+ncvTest(lm3)
+# plot studentized residuals vs. fitted values
+spreadLevelPlot(lm3)
+
+# Evaluate Nonlinearity
+# component+ residual plot
+#crPlots(lm3)
+# Ceres plots
+#ceresPlots(lm3)
+
+durbinWatsonTest(lm3)
+
+library(gvlma)
+gvmodel <- gvlma(lm3)
+summary(gvmodel)
+
+#Summary:
+
+summary(lm3)
+summary(lm7)
